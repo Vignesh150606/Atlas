@@ -1,15 +1,67 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  Phase 12: replaces the unmodified Android Studio default placeholder
+  (a mountain peak + sun, never customized since project creation) with
+  a sunburst mark - eight rounded-capsule rays radiating from a hollow
+  center ring - matching the ATLAS app icon screenshot the user provided
+  (C:\Users\csrvi\OneDrive - SSN-Institute\photo\Screenshot 2026-08-28
+  232344.png).
+
+  Hand-authored vector reconstruction, not an imported asset: there is
+  no tool available in this session to trace a raster image into vector
+  paths automatically, so this was rebuilt by eye/measurement. If it
+  doesn't match closely enough once seen on a device, the authoritative
+  fix is Android Studio's Image Asset tool (right-click res/ -> New ->
+  Image Asset -> Launcher Icons) pointed at that PNG directly, which
+  traces/crops the real artwork instead of approximating it.
+
+  The capsule ray's arc sweep-flags were NOT guessed: an initial version
+  used sweep=1 for both arcs, which a from-scratch Python implementation
+  of the W3C SVG arc endpoint-to-center formula (rasterized and visually
+  checked) showed produces a pinched/bowtie shape, not a capsule -
+  sweep=0 is what actually produces the intended outward-bulging capsule
+  ends, confirmed by rendering both against a PIL rounded_rectangle
+  reference of the intended shape.
+
+  Colors sampled from the screenshot: background #C2704E (terracotta),
+  mark #F4E9DC (warm cream). One capsule-shaped ray defined once and
+  repeated via 8 rotated <group> elements around pivot (54,54), rather
+  than hand-rotating coordinates 8 times.
+-->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Mountain peak -->
+
+    <group android:pivotX="54" android:pivotY="54" android:rotation="0">
+        <path android:fillColor="#F4E9DC" android:pathData="M50.5,40 A3.5,3.5 0 1,0 57.5,40 L57.5,24 A3.5,3.5 0 1,0 50.5,24 Z" />
+    </group>
+    <group android:pivotX="54" android:pivotY="54" android:rotation="45">
+        <path android:fillColor="#F4E9DC" android:pathData="M50.5,40 A3.5,3.5 0 1,0 57.5,40 L57.5,24 A3.5,3.5 0 1,0 50.5,24 Z" />
+    </group>
+    <group android:pivotX="54" android:pivotY="54" android:rotation="90">
+        <path android:fillColor="#F4E9DC" android:pathData="M50.5,40 A3.5,3.5 0 1,0 57.5,40 L57.5,24 A3.5,3.5 0 1,0 50.5,24 Z" />
+    </group>
+    <group android:pivotX="54" android:pivotY="54" android:rotation="135">
+        <path android:fillColor="#F4E9DC" android:pathData="M50.5,40 A3.5,3.5 0 1,0 57.5,40 L57.5,24 A3.5,3.5 0 1,0 50.5,24 Z" />
+    </group>
+    <group android:pivotX="54" android:pivotY="54" android:rotation="180">
+        <path android:fillColor="#F4E9DC" android:pathData="M50.5,40 A3.5,3.5 0 1,0 57.5,40 L57.5,24 A3.5,3.5 0 1,0 50.5,24 Z" />
+    </group>
+    <group android:pivotX="54" android:pivotY="54" android:rotation="225">
+        <path android:fillColor="#F4E9DC" android:pathData="M50.5,40 A3.5,3.5 0 1,0 57.5,40 L57.5,24 A3.5,3.5 0 1,0 50.5,24 Z" />
+    </group>
+    <group android:pivotX="54" android:pivotY="54" android:rotation="270">
+        <path android:fillColor="#F4E9DC" android:pathData="M50.5,40 A3.5,3.5 0 1,0 57.5,40 L57.5,24 A3.5,3.5 0 1,0 50.5,24 Z" />
+    </group>
+    <group android:pivotX="54" android:pivotY="54" android:rotation="315">
+        <path android:fillColor="#F4E9DC" android:pathData="M50.5,40 A3.5,3.5 0 1,0 57.5,40 L57.5,24 A3.5,3.5 0 1,0 50.5,24 Z" />
+    </group>
+
+    <!-- Hollow center ring: outer r=8, inner r=4, evenOdd fill cuts the hole. -->
     <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M54,34 L28,80 L80,80 Z" />
-    <!-- Sun -->
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M76,21 m-7,0 a7,7 0 1,0 14,0 a7,7 0 1,0 -14,0" />
+        android:fillColor="#F4E9DC"
+        android:fillType="evenOdd"
+        android:pathData="M54,54 m-8,0 a8,8 0 1,0 16,0 a8,8 0 1,0 -16,0 M54,54 m-4,0 a4,4 0 1,0 8,0 a4,4 0 1,0 -8,0" />
 </vector>

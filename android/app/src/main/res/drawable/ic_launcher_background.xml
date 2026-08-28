@@ -1,10 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  Phase 12: replaces the unmodified Android Studio default placeholder
+  (a dark blue background with a mountain/sun glyph, never customized
+  since project creation). Solid terracotta, matching the ATLAS app icon
+  the user provided (a cream sunburst mark on a terracotta rounded
+  square) - see ic_launcher_foreground.xml for the mark itself and its
+  honesty caveat.
+-->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
     <path
-        android:fillColor="#283593"
+        android:fillColor="#C2704E"
         android:pathData="M0,0h108v108h-108z" />
 </vector>
