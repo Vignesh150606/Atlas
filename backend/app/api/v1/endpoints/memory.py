@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from typing import List, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database.session import get_db
+from app.core.errors import internal_error
 from app.schemas.memory import MemoryCreate, MemoryUpdate, MemoryResponse, MemoryFilterParams
 from app.services.memory_service import MemoryService
 from app.models.memory import MemoryType
@@ -17,9 +18,10 @@ async def create_memory(
         service = MemoryService(db)
         return await service.create_memory(request)
     except ValueError as val_err:
+        # Deliberate user-facing validation feedback, not an internal leak.
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(val_err))
     except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+        raise internal_error(e, context="POST /memory")
 
 @router.get("/search", response_model=List[MemoryResponse])
 async def search_memories(

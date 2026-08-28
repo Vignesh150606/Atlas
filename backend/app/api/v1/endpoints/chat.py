@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database.session import get_db
 from app.core.deps import get_llm_provider
+from app.core.errors import internal_error
 from app.providers.base import LLMProvider
 from app.schemas.chat import ChatRequest, ChatResponse, DeviceActionResultRequest, MessageSchema
 from app.schemas.memory import MemoryCreate
@@ -22,10 +23,9 @@ async def chat_endpoint(
         service = ChatService(db=db, provider=provider)
         return await service.process_chat(request)
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        )
+        # Phase 12 / SECURITY_PLAN.md S10: generic detail, real exception
+        # logged server-side with a correlation id (see app/core/errors.py).
+        raise internal_error(e, context="POST /chat")
 
 
 @router.post("/device-result", response_model=MessageSchema)
@@ -74,7 +74,4 @@ async def report_device_result(
         await db.commit()
         return assistant_msg
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        )
+        raise internal_error(e, context="POST /chat/device-result")

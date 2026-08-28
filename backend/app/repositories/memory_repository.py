@@ -2,7 +2,7 @@ import difflib
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 from app.utils.time import utc_now
-from sqlalchemy import text
+from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from app.repositories.base import BaseRepository
@@ -25,53 +25,27 @@ class MemoryRepository(BaseRepository[Memory]):
     def __init__(self, db: AsyncSession):
         super().__init__(Memory, db)
 
-    async def init_fts(self) -> None:
-        """Initialize SQLite FTS5 table for full-text search if not exists."""
-        try:
-            await self.db.execute(text("""
-                CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts USING fts5(
-                    id UNINDEXED,
-                    title,
-                    content,
-                    category,
-                    tags
-                );
-            """))
-            await self.db.flush()
-        except Exception:
-            # FTS5 might already exist or SQLite fallback
-            pass
-
-    async def sync_fts_entry(self, memory: Memory) -> None:
-        """Sync or update FTS index entry."""
-        try:
-            tags_str = " ".join(memory.tags) if isinstance(memory.tags, list) else str(memory.tags or "")
-            await self.db.execute(
-                text("DELETE FROM memories_fts WHERE id = :id"),
-                {"id": memory.id}
-            )
-            if memory.deleted_at is None:
-                await self.db.execute(
-                    text("""
-                        INSERT INTO memories_fts(id, title, content, category, tags)
-                        VALUES (:id, :title, :content, :category, :tags)
-                    """),
-                    {
-                        "id": memory.id,
-                        "title": memory.title,
-                        "content": memory.content,
-                        "category": memory.category,
-                        "tags": tags_str
-                    }
-                )
-            await self.db.flush()
-        except Exception:
-            pass
+    # Phase 12 (deployment hardening, docs/MASTER_PLAN.md #2.4): this file
+    # used to also carry init_fts()/sync_fts_entry() building a SQLite
+    # FTS5 virtual table (memories_fts). init_fts() was called only from
+    # tests/test_memory_repository.py - never from application code (not
+    # app.main's lifespan, not any service) - so the table never existed
+    # in production, and sync_fts_entry()/search()'s FTS query both ran
+    # inside a bare `except Exception: pass`, so every write silently no-
+    # op'd and every search silently fell through to the LIKE path below
+    # with no way to tell it was doing so. It was also raw SQLite-specific
+    # SQL (`CREATE VIRTUAL TABLE ... USING fts5`), which would fail
+    # permanently - and just as silently - on the Postgres deployment
+    # target (see docs/DEPLOYMENT_PLAN.md #4). Deleted rather than fixed:
+    # the LIKE path plus app/retrieval/ranking.py's semantic-like scoring
+    # already covers this app's actual scale (single user, low thousands
+    # of rows - see docs/ARCHITECTURE_TARGET.md #6.4), and a real FTS/
+    # search upgrade should be a deliberate, tested addition, not a
+    # silently-dead feature kept around because deleting it felt like a
+    # bigger change than it is.
 
     async def create_memory(self, obj_in: Dict[str, Any]) -> Memory:
-        memory = await self.create(obj_in)
-        await self.sync_fts_entry(memory)
-        return memory
+        return await self.create(obj_in)
 
     async def get_by_id(self, memory_id: str, include_deleted: bool = False) -> Optional[Memory]:
         query = select(Memory).filter(Memory.id == memory_id)
@@ -129,32 +103,15 @@ class MemoryRepository(BaseRepository[Memory]):
         return memories
 
     async def search(self, query_str: str, memory_type: Optional[str] = None, limit: int = 50) -> List[Memory]:
-        """Perform keyword and FTS search."""
+        """Keyword search via SQL LIKE. See the comment above create_memory
+        for why this is the only path now - a dead, silently-failing FTS5
+        attempt used to run first."""
         query_str_clean = query_str.strip()
         if not query_str_clean:
             return await self.get_filtered(memory_type=memory_type, limit=limit)
 
-        # First attempt FTS search if available
-        matched_ids = []
-        try:
-            fts_res = await self.db.execute(
-                text("SELECT id FROM memories_fts WHERE memories_fts MATCH :query LIMIT :limit"),
-                {"query": f"{query_str_clean}*", "limit": limit}
-            )
-            matched_ids = [row[0] for row in fts_res.fetchall()]
-        except Exception:
-            matched_ids = []
-
         not_expired = (Memory.expires_at.is_(None)) | (Memory.expires_at > utc_now())
 
-        if matched_ids:
-            query = select(Memory).filter(Memory.id.in_(matched_ids), Memory.deleted_at.is_(None), not_expired)
-            if memory_type:
-                query = query.filter(Memory.memory_type == memory_type)
-            result = await self.db.execute(query)
-            return result.scalars().all()
-
-        # Fallback to SQL LIKE keyword search
         like_pattern = f"%{query_str_clean}%"
         query = select(Memory).filter(
             Memory.deleted_at.is_(None),
@@ -174,8 +131,22 @@ class MemoryRepository(BaseRepository[Memory]):
             memory.deleted_at = utc_now()
             self.db.add(memory)
             await self.db.flush()
-            await self.sync_fts_entry(memory)
         return memory
+
+    async def count_by_verification_state(self, verification_state: str) -> int:
+        """Phase 12: replaces ProactiveSuggestionService's previous
+        `len(await get_filtered(limit=1000))` scan - it fetched and
+        deserialized up to 1000 full Memory rows just to count how many
+        matched one field, every time the endpoint was polled (see
+        docs/ARCHITECTURE_TARGET.md #9's bottleneck list). A COUNT query
+        does the same job without materializing any rows."""
+        query = (
+            select(func.count())
+            .select_from(Memory)
+            .filter(Memory.deleted_at.is_(None), Memory.verification_state == verification_state)
+        )
+        result = await self.db.execute(query)
+        return result.scalar_one()
 
     async def find_duplicate(
         self, title: str, content: str, memory_type: Optional[str] = None

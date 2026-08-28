@@ -1,12 +1,16 @@
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.repositories.memory_repository import MemoryRepository
-from app.models.memory import MemoryType
+from app.models.memory import MemoryType, VerificationState
 
 @pytest.mark.asyncio
-async def test_memory_repository_crud_and_fts(db_session: AsyncSession):
+async def test_memory_repository_crud_and_search(db_session: AsyncSession):
+    # Phase 12: init_fts()/sync_fts_entry() were deleted - a dead SQLite-
+    # only FTS5 attempt that was never called from production code and
+    # would have broken permanently (and silently) on Postgres; search()
+    # is now the LIKE path only. See MemoryRepository.create_memory's
+    # docstring.
     repo = MemoryRepository(db_session)
-    await repo.init_fts()
 
     # 1. Create
     mem = await repo.create_memory({
@@ -135,3 +139,41 @@ async def test_record_usage_confidence_caps_at_100(db_session: AsyncSession):
     await repo.record_usage([mem.id])
     refreshed = await repo.get_by_id(mem.id)
     assert refreshed.confidence == 100
+
+
+# --- Phase 12: COUNT query replacing the ProactiveSuggestionService scan --
+@pytest.mark.asyncio
+async def test_count_by_verification_state(db_session: AsyncSession):
+    repo = MemoryRepository(db_session)
+    stale = await repo.create_memory({
+        "title": "Old Fact", "content": "Something stated long ago.", "memory_type": MemoryType.FACT.value,
+        "category": "general", "importance": 2, "is_pinned": False, "source": "manual",
+        "tags": [], "structured_data": {},
+    })
+    stale.verification_state = VerificationState.STALE.value
+    db_session.add(stale)
+    await db_session.flush()
+    await repo.create_memory({
+        "title": "Fresh Fact", "content": "Something stated recently.", "memory_type": MemoryType.FACT.value,
+        "category": "general", "importance": 2, "is_pinned": False, "source": "manual",
+        "tags": [], "structured_data": {},
+    })
+
+    assert await repo.count_by_verification_state(VerificationState.STALE.value) == 1
+    assert await repo.count_by_verification_state(VerificationState.CONFIRMED.value) == 0
+
+
+@pytest.mark.asyncio
+async def test_count_by_verification_state_excludes_soft_deleted(db_session: AsyncSession):
+    repo = MemoryRepository(db_session)
+    stale = await repo.create_memory({
+        "title": "Old Fact", "content": "Something stated long ago.", "memory_type": MemoryType.FACT.value,
+        "category": "general", "importance": 2, "is_pinned": False, "source": "manual",
+        "tags": [], "structured_data": {},
+    })
+    stale.verification_state = VerificationState.STALE.value
+    db_session.add(stale)
+    await db_session.flush()
+
+    await repo.soft_delete(stale.id)
+    assert await repo.count_by_verification_state(VerificationState.STALE.value) == 0

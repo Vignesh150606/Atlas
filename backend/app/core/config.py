@@ -1,5 +1,11 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from typing import Optional
+from typing import List, Optional
+
+# Phase 12 / SECURITY_PLAN.md S2: the literal development-only SECRET_KEY
+# default, named so validate_for_environment() can check against it
+# without duplicating the string.
+_DEV_SECRET_KEY_DEFAULT = "secret-key-for-development-only"
+
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "ATLAS"
@@ -50,7 +56,7 @@ class Settings(BaseSettings):
     WEATHER_API_KEY: Optional[str] = None
 
     # Security
-    SECRET_KEY: str = "secret-key-for-development-only"
+    SECRET_KEY: str = _DEV_SECRET_KEY_DEFAULT
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 8  # 8 days
     # Phase 11: a single shared API key, not a multi-user auth system (see
     # app/models/user.py's docstring - that's reserved for a real future
@@ -61,8 +67,45 @@ class Settings(BaseSettings):
     # for a trusted-network deployment, not a breaking change to existing
     # setups. Sent by the Android app as the "X-API-Key" header (see
     # android/.../di/AppModule.kt's ApiKeyInterceptor).
+    #
+    # Phase 12 / SECURITY_PLAN.md S2: still optional here, for the same
+    # non-breaking reason as Phase 11 - but validate_for_environment()
+    # below now refuses to let the app *start* without one once
+    # APP_ENV != "development", so "optional" only ever applies to local
+    # dev, never to anything actually deployed.
     API_KEY: Optional[str] = None
 
+    # Phase 12 / SECURITY_PLAN.md S7: explicit CORS allow-list, empty by
+    # default. The only client today is the native Android app, which
+    # CORS does not apply to (CORS mediates browser requests) - an empty
+    # list is correct, not a placeholder. Set to a real origin list only
+    # if a browser-based client is ever added.
+    CORS_ORIGINS: List[str] = []
+
     model_config = SettingsConfigDict(env_file=".env", case_sensitive=True)
+
+    def validate_for_environment(self) -> None:
+        """Phase 12 / SECURITY_PLAN.md S2 (CRITICAL): called once from
+        app.main's lifespan on real startup (never from tests - see that
+        module's docstring for why the test client doesn't trigger this).
+        Refuses to start a non-development deployment with either the
+        auth key unset or the placeholder secret key still in place -
+        deploying either as-is exposes full read/write on every route to
+        anyone who finds the hostname (see docs/SECURITY_PLAN.md S1/S2).
+        A no-op for APP_ENV == "development" (the default), so local dev
+        and every existing test keep working exactly as before.
+        """
+        if self.APP_ENV == "development":
+            return
+        problems = []
+        if not self.API_KEY:
+            problems.append("API_KEY must be set when APP_ENV is not 'development'")
+        if self.SECRET_KEY == _DEV_SECRET_KEY_DEFAULT:
+            problems.append("SECRET_KEY must be changed from its development default when APP_ENV is not 'development'")
+        if problems:
+            raise RuntimeError(
+                "Refusing to start: " + "; ".join(problems) + ". See docs/SECURITY_PLAN.md."
+            )
+
 
 settings = Settings()

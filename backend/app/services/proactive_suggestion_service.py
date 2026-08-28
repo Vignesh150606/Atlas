@@ -90,8 +90,10 @@ class ProactiveSuggestionService:
                 related_type="routine",
             ))
 
-        stale = await self.memory_repository.get_filtered(limit=1000)
-        stale_count = sum(1 for m in stale if m.verification_state == VerificationState.STALE.value)
+        # Phase 12: COUNT query instead of fetching up to 1000 full Memory
+        # rows just to count one field on each poll (see
+        # MemoryRepository.count_by_verification_state's docstring).
+        stale_count = await self.memory_repository.count_by_verification_state(VerificationState.STALE.value)
         if stale_count >= STALE_MEMORY_SUGGESTION_THRESHOLD:
             suggestions.append(ProactiveSuggestion(
                 suggestion_type="stale_memories",

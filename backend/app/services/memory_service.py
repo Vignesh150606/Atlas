@@ -49,9 +49,7 @@ class MemoryService:
         if "memory_type" in update_data and update_data["memory_type"] is not None:
             update_data["memory_type"] = update_data["memory_type"].value
 
-        updated = await self.repository.update(memory, update_data)
-        await self.repository.sync_fts_entry(updated)
-        return updated
+        return await self.repository.update(memory, update_data)
 
     async def delete_memory(self, memory_id: str) -> Optional[Memory]:
         return await self.repository.soft_delete(memory_id)
