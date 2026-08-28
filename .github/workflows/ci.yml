@@ -32,6 +32,55 @@ jobs:
       - name: Run pytest
         run: python -m pytest -q
 
+  postgres-migration:
+    # Phase 12 (ARCH-TZ / docs/DEPLOYMENT_PLAN.md #4): the unit suite runs
+    # entirely against SQLite (tests/conftest.py) and always has - nothing
+    # before this job ever ran the five migrations in alembic/versions/
+    # against a real Postgres. A static review of every migration found no
+    # SQLite-only DDL (portable generic column types throughout, sa.true()
+    # used for the one boolean server_default), but that review was done
+    # without a Postgres instance available in that session - this job is
+    # the actual verification, not a substitute for it.
+    name: Postgres migration (upgrade + downgrade)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: atlas
+          POSTGRES_PASSWORD: atlas
+          POSTGRES_DB: atlas_migration_check
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql+asyncpg://atlas:atlas@localhost:5432/atlas_migration_check
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: alembic upgrade head
+        run: python -m alembic upgrade head
+
+      - name: alembic downgrade base
+        run: python -m alembic downgrade base
+
   android:
     name: Android (unit tests + assembleDebug)
     runs-on: ubuntu-latest
