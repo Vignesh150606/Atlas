@@ -15,6 +15,7 @@ one "smart" constructor:
 """
 from datetime import datetime, timedelta, timezone as dt_timezone
 from app.utils.time import utc_now
+from app.utils.timezone import to_local, to_utc
 from typing import Optional, List
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.repositories.reminder_repository import ReminderRepository
@@ -73,12 +74,27 @@ class ReminderService:
         in, and `ParsedSchedule.remaining_text` then gives back a clean
         title with every recognized phrase removed - see
         app/nlp/datetime_parser.py's docstring.
+
+        Phase 12 (ARCH-TZ): `parse_datetime_expression` does pure date/time
+        arithmetic ("tomorrow" = reference + 1 day) with no zone awareness
+        of its own - it just trusts whatever frame `reference` is in. Before
+        this phase, `reference` (UTC) was fed straight in and the result was
+        stored as-is, so "tomorrow at 8am" from an IST caller silently
+        became 8am *UTC* = 1:30pm IST. The fix: convert `reference` (UTC) to
+        the caller's local wall-clock time via `timezone` before parsing, so
+        "tomorrow"/"8am"/etc resolve against the user's actual calendar day
+        and clock, then convert the resulting due_at back to UTC before
+        storing (every DateTime column stays naive-UTC - see
+        app/utils/time.py). For the default zone "UTC" this round-trip is
+        the identity transform, which is why every pre-Phase-12 test below
+        keeps passing unchanged.
         """
         parsed = MemoryExtractor.parse_reminder(text)
         if not parsed:
             return None
 
-        reference = reference_time or utc_now()
+        reference_utc = reference_time or utc_now()
+        reference = to_local(reference_utc, timezone)
         combined = parsed["task"]
         if parsed.get("due_date"):
             combined = f"{combined} {parsed['due_date']}"
@@ -86,7 +102,12 @@ class ReminderService:
         schedule = parse_datetime_expression(combined, reference)
 
         if schedule.matched:
-            due_at = schedule.due_at
+            # schedule.due_at is in the *local* frame (it was computed
+            # against the local `reference` above) - convert back to UTC
+            # before it ever reaches storage or the repository, so
+            # Reminder.due_at stays naive-UTC like every other DateTime
+            # column in this codebase.
+            due_at = to_utc(schedule.due_at, timezone) if schedule.due_at else None
             recurrence = schedule.recurrence
             recurrence_days = schedule.recurrence_days
             when_text = schedule.matched_text
@@ -148,7 +169,7 @@ class ReminderService:
             })
         next_due = self._advance_recurrence(reminder, now)
         return await self.repository.update(reminder, {
-            "due_at": next_due,
+            "due_at": next_due,  # already converted back to UTC inside _advance_recurrence
             "completed_at": now,
             "status": ReminderStatus.PENDING.value,
         })
@@ -172,11 +193,29 @@ class ReminderService:
     def _advance_recurrence(reminder: Reminder, now: datetime) -> datetime:
         """Computes the next occurrence strictly after `now` (not just
         after the old due_at - a reminder completed late shouldn't
-        immediately re-fire for a slot that's already passed)."""
+        immediately re-fire for a slot that's already passed).
+
+        Phase 12 (ARCH-TZ): `now` arrives as UTC (utc_now(), from
+        complete() above) and `reminder.due_at` is stored as UTC too - but
+        "what calendar day is today" and "what clock time does this
+        reminder repeat at" are both *local* concepts to the user. Doing
+        this arithmetic directly in UTC is the same class of bug as
+        create_from_text's pre-Phase-12 behavior: near local midnight, the
+        UTC calendar day and the local calendar day disagree, so "the next
+        occurrence" could silently land a day off. Converting `now` and the
+        stored due_at into `reminder.timezone` before the date/time math,
+        then converting the result back to UTC before returning, fixes
+        this the same way create_from_text was fixed. For reminder.timezone
+        == "UTC" (every pre-Phase-12 reminder, and the default for new
+        ones unless a client says otherwise) this round-trip is the
+        identity transform.
+        """
+        zone = reminder.timezone
+        local_now = to_local(now, zone)
         recurrence = reminder.recurrence
         days = reminder.recurrence_days or []
-        base_date = now.date()
-        time_of_day = (reminder.due_at or now).time()
+        base_date = local_now.date()
+        time_of_day = to_local(reminder.due_at, zone).time() if reminder.due_at else local_now.time()
 
         if recurrence == RecurrenceType.DAILY.value:
             next_date = base_date + timedelta(days=1)
@@ -191,4 +230,5 @@ class ReminderService:
         else:
             next_date = base_date + timedelta(days=1)
 
-        return datetime.combine(next_date, time_of_day)
+        next_local = datetime.combine(next_date, time_of_day)
+        return to_utc(next_local, zone)

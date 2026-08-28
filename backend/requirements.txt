@@ -15,3 +15,10 @@ passlib[bcrypt]==1.7.4
 structlog==24.1.0
 pypdf==4.3.1
 python-dateutil==2.9.0
+# Phase 12 (ARCH-TZ): stdlib zoneinfo has no bundled tzdata on Windows (and
+# on some minimal Linux base images) - it looks for the OS's own IANA
+# database and raises ZoneInfoNotFoundError if none is found. This package
+# provides that data as a normal importable module so zoneinfo works
+# identically across dev (Windows) and deployment (Linux) without relying
+# on the host OS having tzdata installed. See app/utils/timezone.py.
+tzdata==2024.1

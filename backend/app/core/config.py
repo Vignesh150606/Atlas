@@ -26,6 +26,16 @@ class Settings(BaseSettings):
     MAX_HISTORY_MESSAGES: int = 20  # trimmed by ConversationService before each generation
     MAX_RETRIEVED_MEMORIES: int = 5
 
+    # Phase 12 (ARCH-TZ): fallback IANA zone used whenever a request carries
+    # no client_timezone (see app/utils/timezone.py::resolve_zone). Every
+    # DateTime column stays naive-UTC in storage - this only controls how
+    # "now"/"today" are *resolved and rendered* when the client doesn't say.
+    # Defaulting to the developer's own zone rather than "UTC" matches how
+    # this single-user app has always been used in practice; a real client
+    # timezone (sent by the Android app - see ChatRequest.client_timezone)
+    # always takes precedence over this fallback.
+    DEFAULT_TIMEZONE: str = "Asia/Kolkata"
+
     # Personal Knowledge System (Phase 6)
     MAX_DOCUMENT_SIZE_MB: int = 20
     MAX_RETRIEVED_DOCUMENTS: int = 5

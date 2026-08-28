@@ -17,6 +17,7 @@ from app.planner.planner import Planner
 from app.tools.router import ToolRouter
 from app.observability.trace import RequestTrace
 from app.core.config import settings
+from app.utils.timezone import to_utc
 
 
 class ChatService:
@@ -84,7 +85,9 @@ class ChatService:
 
         # --- Intent Analysis + Reasoning Plan (deterministic, no LLM) ---
         intent_result = IntentService.classify(chat_request.message)
-        plan = Planner.build_plan(chat_request.message, intent_result)
+        plan = Planner.build_plan(
+            chat_request.message, intent_result, client_timezone=chat_request.client_timezone
+        )
         trace.intent = intent_result.intent.value
         trace.intent_confidence = intent_result.confidence
         trace.planner_notes = plan.notes
@@ -166,6 +169,20 @@ class ChatService:
             trace.ambiguity_detected = True
 
         # --- Context Builder ---
+        # Phase 12 (ARCH-TZ): client_now, if the client sent one, is its own
+        # local wall-clock reading - convert to UTC before handing it to
+        # PromptBuilder, which always expects `now` as a UTC instant and
+        # renders it back into client_timezone itself (see
+        # PromptBuilder._format_datetime). Omitted client_now (the common
+        # case) leaves PromptBuilder to default to the server clock, which
+        # is correct as long as server and phone are both roughly
+        # NTP-synced.
+        now_utc = (
+            to_utc(chat_request.client_now, chat_request.client_timezone)
+            if chat_request.client_now is not None
+            else None
+        )
+
         prompt_context = PromptBuilder.build(
             history=history,
             current_message=chat_request.message,
@@ -177,6 +194,8 @@ class ChatService:
             user_profile_memories=pinned_memories,
             conversation_summary=rollover_note,
             conversation_hints=conversation_hints,
+            now=now_utc,
+            client_timezone=chat_request.client_timezone,
         )
 
         try:

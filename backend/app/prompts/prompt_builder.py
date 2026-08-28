@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from typing import List, Optional, TYPE_CHECKING
 from app.models.memory import Memory
 from app.providers.base import ProviderMessage
+from app.utils.timezone import to_local, resolve_zone
 
 if TYPE_CHECKING:
     from app.planner.planner import ExecutionPlan
@@ -91,8 +92,18 @@ class PromptBuilder:
         return "What ATLAS knows about the user (pinned facts):\n" + "\n".join(lines)
 
     @staticmethod
-    def _format_datetime(now: datetime) -> str:
-        return f"Current date/time: {now.strftime('%A, %B %d, %Y %H:%M UTC')}"
+    def _format_datetime(now: datetime, client_timezone: Optional[str] = None) -> str:
+        """Phase 12 (ARCH-TZ): `now` is always UTC-aware-or-naive-UTC on the
+        way in (every existing caller, including tests, passes it that way -
+        see PromptBuilder.build's own conversion below). This renders it in
+        the *user's* local time and weekday, not UTC, so the LLM's sense of
+        "today"/"right now" matches the user's actual clock - previously
+        this was always UTC regardless of where the user is, which is wrong
+        for roughly a third of every day for an IST user.
+        """
+        local = to_local(now.replace(tzinfo=None), client_timezone)
+        zone_name = resolve_zone(client_timezone).key
+        return f"Current date/time: {local.strftime('%A, %B %d, %Y %H:%M')} ({zone_name})"
 
     @staticmethod
     def _format_provider(provider_name: str) -> str:
@@ -146,11 +157,12 @@ class PromptBuilder:
         conversation_summary: Optional[str] = None,
         conversation_hints: Optional[List[str]] = None,
         now: Optional[datetime] = None,
+        client_timezone: Optional[str] = None,
     ) -> PromptContext:
         sections = [system_prompt, developer_prompt]
 
         now = now or datetime.now(timezone.utc)
-        sections.append(PromptBuilder._format_datetime(now))
+        sections.append(PromptBuilder._format_datetime(now, client_timezone))
 
         if provider_name:
             sections.append(PromptBuilder._format_provider(provider_name))

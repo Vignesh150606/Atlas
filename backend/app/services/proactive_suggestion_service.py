@@ -42,7 +42,20 @@ class ProactiveSuggestionService:
         self.routine_service = RoutineService(db)
         self.memory_repository = MemoryRepository(db)
 
-    async def get_suggestions(self, reference: Optional[datetime] = None) -> ProactiveSuggestionsResponse:
+    async def get_suggestions(
+        self, reference: Optional[datetime] = None, client_timezone: Optional[str] = None
+    ) -> ProactiveSuggestionsResponse:
+        """Phase 12 (ARCH-TZ): `client_timezone`, when given, is used to
+        interpret `reference` (UTC) as the user's local time for routine
+        time-of-day matching (see RoutineService.get_active_around) -
+        reminder overdue/due-soon comparisons below need no such
+        conversion since they compare stored UTC due_at against UTC
+        reference directly. Defaults to None (no conversion) rather than
+        settings.DEFAULT_TIMEZONE so existing tests that pass an explicit,
+        already-local `reference` keep their exact pre-Phase-12 meaning;
+        the production caller (GET /briefing/suggestions) resolves a real
+        zone before calling this.
+        """
         reference = reference or utc_now()
         suggestions = []
 
@@ -68,7 +81,7 @@ class ProactiveSuggestionService:
                 related_type="reminder",
             ))
 
-        routines_now = await self.routine_service.get_active_around(reference, window_minutes=15)
+        routines_now = await self.routine_service.get_active_around(reference, window_minutes=15, zone=client_timezone)
         for routine in routines_now:
             suggestions.append(ProactiveSuggestion(
                 suggestion_type="routine_time",

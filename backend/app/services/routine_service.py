@@ -1,5 +1,6 @@
 from datetime import datetime
 from app.utils.time import utc_now
+from app.utils.timezone import to_local
 from typing import Optional, List
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.repositories.routine_repository import RoutineRepository
@@ -49,7 +50,9 @@ class RoutineService:
     async def delete(self, routine_id: str) -> Optional[Routine]:
         return await self.repository.delete(routine_id)
 
-    async def get_active_around(self, reference: Optional[datetime] = None, window_minutes: int = 60) -> List[Routine]:
+    async def get_active_around(
+        self, reference: Optional[datetime] = None, window_minutes: int = 60, zone: Optional[str] = None
+    ) -> List[Routine]:
         """Active routines whose `time_of_day` falls within
         `window_minutes` of `reference` (default: now) on a day they
         apply - what DailyBriefingService/ProactiveSuggestionService use
@@ -57,12 +60,26 @@ class RoutineService:
         filtering over an already-small table (routines are hand-authored
         by one user - dozens at most, not thousands), so no need for a
         SQL time-window query.
+
+        Phase 12 (ARCH-TZ): `routine.time_of_day` ("07:15") is a local
+        wall-clock time the user wrote down - it means 7:15am on their own
+        clock, not 7:15 UTC. Comparing it directly against a UTC `reference`
+        (the pre-Phase-12 behavior) is wrong by the zone's offset, and can
+        even pick the wrong `weekday()`. `zone` is optional and defaults to
+        None - meaning "treat `reference` as already local, don't convert" -
+        so an explicit naive reference (as every existing test in
+        tests/test_routine_service.py passes) keeps its pre-Phase-12
+        meaning unchanged. A real caller with a genuine UTC `reference`
+        (ProactiveSuggestionService, DailyBriefingService - both default
+        `reference` to utc_now()) should pass its resolved IANA zone name
+        here to get a correct comparison.
         """
         reference = reference or utc_now()
+        local_reference = to_local(reference, zone) if zone else reference
         routines = await self.repository.get_filtered(is_active=True, limit=1000)
         matches: List[Routine] = []
         for routine in routines:
-            if routine.days_of_week and reference.weekday() not in routine.days_of_week:
+            if routine.days_of_week and local_reference.weekday() not in routine.days_of_week:
                 continue
             if not routine.time_of_day:
                 continue
@@ -71,7 +88,7 @@ class RoutineService:
             except (ValueError, AttributeError):
                 continue
             routine_minutes = hour * 60 + minute
-            reference_minutes = reference.hour * 60 + reference.minute
+            reference_minutes = local_reference.hour * 60 + local_reference.minute
             # Circular distance on a 24h clock (1440 minutes), not a plain
             # absolute difference - otherwise a routine just before
             # midnight (e.g. 23:50) checked just after (e.g. 00:05) reads

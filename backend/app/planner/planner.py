@@ -239,7 +239,7 @@ class Planner:
         return None
 
     @classmethod
-    def _build_skill_tool_calls(cls, message: str) -> List[PlannedToolCall]:
+    def _build_skill_tool_calls(cls, message: str, client_timezone: Optional[str] = None) -> List[PlannedToolCall]:
         """Phase 9: the ONE generic hook for the entire pluggable skill
         system (see app/skills/base.py and app/skills/registry.py). Every
         skill owns its own trigger detection via `.match()`; this method
@@ -252,14 +252,26 @@ class Planner:
         Every match is included (not just the top one): this is what makes
         "remind me to call John and what time is it" a genuine two-call
         multi-step plan instead of an arbitrary pick between them.
+
+        Phase 12 (ARCH-TZ): `client_timezone` is merged into every skill
+        call's kwargs generically here - one addition, not per-skill - so
+        ReminderSkill/CalendarSkill can resolve "tomorrow"/"8am" against
+        the user's actual local time (see app/skills/reminder_skill.py and
+        app/services/reminder_service.py). Every Skill.run() accepts
+        **kwargs, so skills that don't care about it simply ignore it.
         """
         calls = []
         for skill, skill_match in SkillRegistry.match_all(message):
-            calls.append(PlannedToolCall(tool=skill.name, args=skill_match.kwargs))
+            args = dict(skill_match.kwargs)
+            if client_timezone:
+                args["timezone"] = client_timezone
+            calls.append(PlannedToolCall(tool=skill.name, args=args))
         return calls
 
     @classmethod
-    def build_plan(cls, message: str, intent_result: IntentResult) -> ExecutionPlan:
+    def build_plan(
+        cls, message: str, intent_result: IntentResult, client_timezone: Optional[str] = None
+    ) -> ExecutionPlan:
         tool_calls: List[PlannedToolCall] = []
         target_types: Optional[Set[str]] = None
         notes_parts: List[str] = [f"intent={intent_result.intent.value}"]
@@ -297,7 +309,7 @@ class Planner:
         # --- Phase 9: pluggable skills (computed early so the generic
         # document-keyword fallback below can defer to a more specific
         # skill match rather than firing redundantly alongside it) ---
-        skill_calls = cls._build_skill_tool_calls(message)
+        skill_calls = cls._build_skill_tool_calls(message, client_timezone=client_timezone)
         skill_tool_names = {c.tool for c in skill_calls}
 
         # --- Phase 6: Personal Knowledge System routing ---

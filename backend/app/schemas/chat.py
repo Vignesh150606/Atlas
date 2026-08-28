@@ -6,6 +6,22 @@ from app.utils.time import utc_now
 class ChatRequest(BaseModel):
     message: str = Field(..., description="User message text")
     conversation_id: Optional[int] = Field(None, description="Optional conversation ID")
+    # Phase 12 (ARCH-TZ): the client's IANA zone name (e.g. "Asia/Kolkata").
+    # Optional - a request that omits it (an older client, a test, a direct
+    # API call) falls back to settings.DEFAULT_TIMEZONE (see
+    # app/utils/timezone.py::resolve_zone), so this is purely additive and
+    # breaks no existing caller.
+    client_timezone: Optional[str] = Field(
+        None, description="IANA timezone name from the client, e.g. 'Asia/Kolkata'. Falls back to DEFAULT_TIMEZONE if omitted."
+    )
+    # Optional client-reported local wall-clock "now", for the rare case
+    # where the server's own clock and the phone's clock have drifted
+    # enough to matter. Not required - by default "now" is derived from the
+    # server clock converted into client_timezone, which is correct as long
+    # as the two clocks roughly agree (true for NTP-synced phones and hosts).
+    client_now: Optional[datetime] = Field(
+        None, description="Optional client-reported local wall-clock time; defaults to server time converted into client_timezone."
+    )
 
 class DeviceActionSchema(BaseModel):
     """Phase 8: a directive for the Android app to execute locally (the

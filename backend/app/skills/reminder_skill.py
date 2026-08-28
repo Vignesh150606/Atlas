@@ -36,6 +36,7 @@ from app.skills.registry import register_skill
 from app.tools.base import ToolResult
 from app.memory.memory_extractor import MemoryExtractor
 from app.services.reminder_service import ReminderService
+from app.utils.timezone import to_local
 
 _REMINDER_PATTERN = re.compile(r"\bremind me to\b", re.IGNORECASE)
 
@@ -54,10 +55,21 @@ class ReminderSkill(Skill):
         return SkillMatch(kwargs={"task": parsed["task"], "due_date": parsed["due_date"]}, confidence=0.85)
 
     async def run(
-        self, task: str = "", due_date: Optional[str] = None, conversation_id: Optional[str] = None, **kwargs
+        self,
+        task: str = "",
+        due_date: Optional[str] = None,
+        conversation_id: Optional[str] = None,
+        timezone: Optional[str] = None,
+        **kwargs,
     ) -> ToolResult:
         if not task:
             return ToolResult(tool_name=self.name, success=False, output=None, error="No task text recognized.")
+
+        # Phase 12 (ARCH-TZ): Planner._build_skill_tool_calls merges the
+        # request's client_timezone into every skill call's kwargs; falls
+        # back to ReminderService's own "UTC" default when the caller
+        # (e.g. an existing db-less unit test) doesn't supply one.
+        zone = timezone or "UTC"
 
         due_at = None
         if self.db is not None:
@@ -69,14 +81,18 @@ class ReminderSkill(Skill):
             # `task`/`due_date` this method was matched with.
             full_text = f"remind me to {task}" + (f" by {due_date}" if due_date else "")
             reminder = await ReminderService(self.db).create_from_text(
-                full_text, conversation_id=conversation_id
+                full_text, conversation_id=conversation_id, timezone=zone
             )
             if reminder is not None:
                 due_at = reminder.due_at
 
         summary = f"Got it - I'll remember that you need to {task}"
         if due_at:
-            summary += f", due {due_at.strftime('%A, %b %d at %I:%M %p').replace(' 0', ' ')}."
+            # due_at is stored UTC (see ReminderService.create_from_text) -
+            # convert back to the user's zone before speaking it back, or
+            # the confirmation itself would state the wrong time.
+            local_due_at = to_local(due_at, zone)
+            summary += f", due {local_due_at.strftime('%A, %b %d at %I:%M %p').replace(' 0', ' ')}."
         elif due_date:
             summary += f", due {due_date}."
         else:

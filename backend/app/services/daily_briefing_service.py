@@ -46,8 +46,21 @@ class DailyBriefingService:
         self.memory_repository = MemoryRepository(db)
 
     async def build(
-        self, reference: Optional[datetime] = None, upcoming_window: timedelta = DEFAULT_UPCOMING_WINDOW
+        self,
+        reference: Optional[datetime] = None,
+        upcoming_window: timedelta = DEFAULT_UPCOMING_WINDOW,
+        client_timezone: Optional[str] = None,
     ) -> DailyBriefingResponse:
+        """Phase 12 (ARCH-TZ): client_timezone, when given, is used only
+        for routine time-of-day matching below (see
+        RoutineService.get_active_around) - reminders/tasks are already
+        correct without it since they compare stored UTC values against a
+        UTC reference. Defaults to None (no conversion), matching
+        ProactiveSuggestionService's reasoning: existing tests pass an
+        explicit, already-local `reference` and must keep their exact
+        pre-Phase-12 meaning; GET /briefing/daily resolves a real zone
+        before calling this.
+        """
         reference = reference or utc_now()
 
         upcoming_reminders = await self.reminder_service.get_upcoming(upcoming_window, reference)
@@ -66,7 +79,9 @@ class DailyBriefingService:
                 merged_reminders.append(r)
 
         incomplete_tasks = await self.task_service.list_incomplete(limit=50)
-        routines_today = await self.routine_service.get_active_around(reference, window_minutes=12 * 60)
+        routines_today = await self.routine_service.get_active_around(
+            reference, window_minutes=12 * 60, zone=client_timezone
+        )
 
         important_memories = await self.memory_repository.get_filtered(is_pinned=True, limit=5)
         if len(important_memories) < 5:

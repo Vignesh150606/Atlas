@@ -22,6 +22,7 @@ from app.skills.base import Skill, SkillMatch
 from app.skills.registry import register_skill
 from app.tools.base import ToolResult
 from app.services.daily_briefing_service import DailyBriefingService
+from app.utils.timezone import to_local
 
 _BRIEFING_PATTERN = re.compile(
     r"\b(?:daily briefing|my briefing|brief me)\b|\bwhat'?s my day (?:look like|looking like)\b|"
@@ -40,15 +41,23 @@ class BriefingSkill(Skill):
             return SkillMatch(confidence=0.85)
         return None
 
-    async def run(self, **kwargs) -> ToolResult:
+    async def run(self, timezone: Optional[str] = None, **kwargs) -> ToolResult:
         if self.db is None:
             return ToolResult(tool_name=self.name, success=False, output=None, error="No database session available.")
 
-        briefing = await DailyBriefingService(self.db).build()
+        # Phase 12 (ARCH-TZ): Planner._build_skill_tool_calls merges the
+        # request's client_timezone into every skill call's kwargs.
+        briefing = await DailyBriefingService(self.db).build(client_timezone=timezone)
         output = {
             "narrative": briefing.narrative,
             "upcoming_reminders": [
-                {"title": r.title, "due_at": r.due_at.isoformat() if r.due_at else None}
+                {
+                    "title": r.title,
+                    # due_at is stored UTC - render local so the LLM
+                    # phrases the right clock time back to the user
+                    # instead of a UTC timestamp with no zone marker.
+                    "due_at": to_local(r.due_at, timezone).isoformat() if r.due_at else None,
+                }
                 for r in briefing.upcoming_reminders
             ],
             "incomplete_tasks": [{"title": t.title, "priority": t.priority} for t in briefing.incomplete_tasks],
