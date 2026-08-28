@@ -1,0 +1,67 @@
+name: CI
+
+# Phase 12 (docs/FINAL_ROADMAP.md, docs/SONNET_IMPLEMENTATION_PLAN.md 12.1):
+# this project had no CI prior to Phase 12 - nothing enforced the 417
+# backend / 123 Android tests before a change landed. Two independent jobs,
+# matching the two halves of the project; neither depends on the other.
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  backend:
+    name: Backend (pytest)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run pytest
+        run: python -m pytest -q
+
+  android:
+    name: Android (unit tests + assembleDebug)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "21"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Run unit tests
+        run: ./gradlew test --console=plain
+
+      - name: Assemble debug APK
+        run: ./gradlew assembleDebug --console=plain
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-test-results
+          path: android/app/build/test-results/testDebugUnitTest/
