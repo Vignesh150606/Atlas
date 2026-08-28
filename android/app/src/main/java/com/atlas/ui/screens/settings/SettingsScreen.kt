@@ -46,14 +46,75 @@ fun SettingsScreen(
             Text(text = "Provider", style = MaterialTheme.typography.titleMedium)
             Spacer(modifier = Modifier.height(4.dp))
             Text(text = "Current Provider: Mock (Phase 1)", style = MaterialTheme.typography.bodyMedium)
-            
+
             Spacer(modifier = Modifier.height(24.dp))
             Text(text = "Backend Server", style = MaterialTheme.typography.titleMedium)
             Spacer(modifier = Modifier.height(4.dp))
-            // Phase 8 stabilization: was a hardcoded literal here that had
-            // already drifted from AppModule's actual BASE_URL; now reads
-            // the same single source of truth (see app/build.gradle.kts).
-            Text(text = "URL: ${com.atlas.BuildConfig.API_BASE_URL}", style = MaterialTheme.typography.bodyMedium)
+            Text(
+                text = if (uiState.baseUrlIsDefault) {
+                    "Default - only reachable from the Android Emulator, not a physical device or mobile data."
+                } else {
+                    "Custom server address."
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            OutlinedTextField(
+                value = uiState.baseUrl,
+                onValueChange = viewModel::onBaseUrlChanged,
+                label = { Text("Server URL") },
+                placeholder = { Text("https://your-server.example.com") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Button(onClick = viewModel::saveBaseUrl) {
+                    Text("Save")
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                OutlinedButton(onClick = viewModel::testConnection) {
+                    Text("Test Connection")
+                }
+                if (uiState.baseUrlSavedConfirmation) {
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text(
+                        text = "Saved",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+            when (uiState.connectionTestResult) {
+                ConnectionTestResult.TESTING -> {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("Testing...", style = MaterialTheme.typography.bodySmall)
+                }
+                ConnectionTestResult.SUCCESS -> {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        uiState.connectionTestMessage,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+                ConnectionTestResult.FAILURE -> {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        uiState.connectionTestMessage,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+                ConnectionTestResult.NONE -> {}
+            }
+            LaunchedEffect(uiState.baseUrlSavedConfirmation) {
+                if (uiState.baseUrlSavedConfirmation) {
+                    kotlinx.coroutines.delay(2000)
+                    viewModel.clearBaseUrlSavedConfirmation()
+                }
+            }
 
             Spacer(modifier = Modifier.height(24.dp))
             // Phase 11: shared API key (see backend Settings.API_KEY /

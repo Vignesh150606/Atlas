@@ -21,17 +21,15 @@ android {
             useSupportLibrary = true
         }
 
-        // Phase 8 stabilization: was a hardcoded literal duplicated only in
-        // AppModule.kt, which also meant a real device could never point at
-        // a real dev machine without editing source. Centralized here as
-        // the single source of truth; AppModule.kt now reads
-        // BuildConfig.API_BASE_URL instead of a private const.
-        // 10.0.2.2 is the Android Emulator's alias for the host machine's
-        // localhost - it is NOT reachable from a physical device. For a
-        // physical device, override this (e.g. via a -P gradle property or
-        // a local.properties-driven value) to your machine's LAN IP, and
-        // add that host to src/debug/res/xml/network_security_config.xml.
-        buildConfigField("String", "API_BASE_URL", "\"http://10.141.145.170:8000/api/v1/\"")
+        // Phase 12 (docs/MASTER_PLAN.md #2.1): a hardcoded LAN IP used to
+        // live here as a buildConfigField, requiring a source edit and a
+        // rebuild to point at any other server, and requiring that IP to
+        // also be added to network_security_config.xml's cleartext
+        // allow-list - a step that was missed, so every request from the
+        // installed APK failed. The server address is now a runtime
+        // setting (see data/local/ServerConfigStore.kt, applied per-request
+        // by di/BaseUrlInterceptor.kt, editable from Settings) - no build
+        // field needed for it at all.
     }
 
     buildTypes {
@@ -49,9 +47,11 @@ android {
     }
     buildFeatures {
         compose = true
-        // Phase 8 stabilization: AGP 8+ no longer generates the BuildConfig
-        // class by default - required explicitly now that defaultConfig
-        // above declares buildConfigField.
+        // AGP 8+ no longer generates the BuildConfig class by default.
+        // Phase 12 removed the last custom buildConfigField (the hardcoded
+        // LAN IP - see defaultConfig above), but this stays enabled since
+        // AppModule.kt still reads the standard BuildConfig.DEBUG field to
+        // gate HTTP logging (SECURITY_PLAN.md S3).
         buildConfig = true
     }
     composeOptions {
@@ -86,7 +86,14 @@ dependencies {
     implementation("androidx.work:work-runtime-ktx:2.9.0")
     implementation("androidx.hilt:hilt-work:1.1.0")
     kapt("androidx.hilt:hilt-compiler:1.1.0")
-    
+
+    // Phase 12 / SECURITY_PLAN.md S4: EncryptedSharedPreferences for the
+    // API key and server URL (data/local/ApiKeyStore.kt,
+    // data/local/ServerConfigStore.kt) - previously plain MODE_PRIVATE
+    // SharedPreferences, readable on a rooted device or via an unlocked
+    // device backup path.
+    implementation("androidx.security:security-crypto:1.1.0-alpha06")
+
     // Retrofit
     implementation("com.squareup.retrofit2:retrofit:2.9.0")
     implementation("com.squareup.retrofit2:converter-gson:2.9.0")

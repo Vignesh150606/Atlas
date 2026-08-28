@@ -28,11 +28,16 @@ interface ApiKeyProvider {
  * its extra Gradle dependency. If a second setting needing real
  * persistence shows up, that's the point to introduce DataStore and
  * migrate this - not before.
+ *
+ * Phase 12 / SECURITY_PLAN.md S4: backed by EncryptedSharedPreferences
+ * (see EncryptedPrefs.kt) rather than plain MODE_PRIVATE prefs - the key
+ * is a credential and was previously readable on a rooted device or via
+ * an unlocked-device backup path.
  */
 @Singleton
 class ApiKeyStore @Inject constructor(@ApplicationContext context: Context) : ApiKeyProvider {
 
-    private val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    private val prefs = EncryptedPrefs.create(context, PREFS_NAME)
 
     override fun getApiKey(): String? = prefs.getString(KEY_API_KEY, null)?.takeIf { it.isNotBlank() }
 
