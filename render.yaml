@@ -1,0 +1,47 @@
+# Phase 12 (docs/DEPLOYMENT_PLAN.md). Render "Blueprint" spec - lets the
+# user import this repo on Render as one unit instead of manually
+# configuring a web service by hand.
+#
+# Deliberately does NOT declare a `databases:` block: Render's own
+# managed Postgres is a paid product (its free-tier Postgres offering has
+# changed / been withdrawn before - verify current terms before relying
+# on it, per docs/DEPLOYMENT_PLAN.md #8). This blueprint instead expects
+# DATABASE_URL to be set manually in the Render dashboard after import,
+# pointing at whatever free-tier Postgres the user has provisioned
+# elsewhere (Neon and Supabase both currently offer a free tier with no
+# hard expiration - verify current limits before committing, same rule
+# as everywhere else in this plan). Using SQLite instead is possible for
+# a first smoke test, but Render's free web service tier has an
+# EPHEMERAL disk - a SQLite file there is wiped on every redeploy and
+# every scale-to-zero cycle, so it is not durable even for testing beyond
+# a single session.
+#
+# Free tier caveat (see docs/DEPLOYMENT_PLAN.md #2, #3): Render's free
+# web service spins down after ~15 minutes idle and cold-starts on the
+# next request (tens of seconds). Fine for "does this work at all"
+# testing; not acceptable for the eventual daily-driver target - see
+# docs/DAILY_DRIVER_REQUIREMENTS.md gate G1/G2.
+
+services:
+  - type: web
+    name: atlas-backend
+    runtime: docker
+    dockerfilePath: ./docker/backend.Dockerfile
+    dockerContext: ./backend
+    plan: free
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false # set manually in the Render dashboard - see comment above
+      - key: API_KEY
+        generateValue: true # Render generates a random value; copy it into the Android app's Settings screen
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DEFAULT_LLM_PROVIDER
+        value: mock # change once a real provider key is set below - mock costs nothing and proves the deploy works first
+      - key: CLAUDE_API_KEY
+        sync: false
+      - key: DEFAULT_TIMEZONE
+        value: Asia/Kolkata

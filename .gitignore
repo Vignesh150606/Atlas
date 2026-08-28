@@ -34,3 +34,6 @@ android/captures/
 .vscode/
 .DS_Store
 Thumbs.db
+
+# --- Claude Code session state (harness-internal, not project source) ---
+.claude/

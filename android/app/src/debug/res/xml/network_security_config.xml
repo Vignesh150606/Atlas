@@ -1,28 +1,45 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Phase 8 stabilization fix.
+  Phase 8 stabilization fix, updated Phase 12.
 
   Root cause of Phase 7's "builds but doesn't run": targetSdk is 34, and
   since API 28 Android blocks cleartext (plain HTTP) traffic by default
-  unless a network security config explicitly allows it for that host. The
-  app talks to AppModule's BASE_URL (http://10.0.2.2:8000/...) over plain
-  HTTP, so *every* Retrofit call - including plain text chat, not just
-  Phase 8 automation - was silently failing at runtime with
-  "CLEARTEXT communication to 10.0.2.2 not permitted by network security
-  policy", despite compiling and installing fine. This is why the mission
-  brief is right that Phase 7 was build-verified but not runtime-verified.
+  unless a network security config explicitly allows it for that host.
+  This is why the mission brief is right that Phase 7 was build-verified
+  but not runtime-verified.
 
   This file lives under src/debug/ (see src/debug/AndroidManifest.xml),
   so it is only merged into debug builds. Release builds get no
   networkSecurityConfig override and keep the platform default of
-  blocking cleartext entirely, which is what we want for a real release.
+  blocking cleartext entirely, which is what we want for a real release -
+  a real deployment (docs/DEPLOYMENT_PLAN.md) is HTTPS, which cleartext
+  policy never touches at all.
+
+  Phase 12: the server address is now a runtime Settings field (see
+  data/local/ServerConfigStore.kt / di/BaseUrlInterceptor.kt) instead of
+  a build-time constant, but this allowlist still gates plain HTTP
+  regardless of what's typed there - entering a host below only works if
+  it's also listed here.
+
+  The LAN IP below is a same-Wi-Fi dev-testing convenience (phone and
+  this development PC on the same network, backend run with host set to
+  0.0.0.0 so it's reachable from other devices, not just localhost) -
+  NOT a deployment address. DHCP can reassign it; if the
+  phone stops connecting after a network change, re-check this machine's
+  current IP (`ipconfig` -> the Wi-Fi adapter) and update it here. This
+  step disappears entirely once the backend is deployed with HTTPS
+  (Phase 12.6) - cleartext exceptions are a debug-only, local-testing
+  concern.
 -->
 <network-security-config>
     <domain-config cleartextTrafficPermitted="true">
         <!-- 10.0.2.2 is the Android Emulator's alias for the host
-             machine's localhost - see AppModule.BASE_URL / BuildConfig.API_BASE_URL. -->
+             machine's localhost. -->
         <domain includeSubdomains="false">10.0.2.2</domain>
         <domain includeSubdomains="false">localhost</domain>
         <domain includeSubdomains="false">127.0.0.1</domain>
+        <!-- This development PC's current Wi-Fi LAN IP, for testing from
+             a physical phone on the same network (see comment above). -->
+        <domain includeSubdomains="false">10.125.177.170</domain>
     </domain-config>
 </network-security-config>
