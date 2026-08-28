@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Phase 8 stabilization fix - debug-build-only manifest override.
+
+  The Android Gradle Plugin automatically merges src/debug/AndroidManifest.xml
+  on top of src/main/AndroidManifest.xml for debug builds only (this is a
+  standard AGP source-set convention - no extra build.gradle.kts wiring is
+  needed for the merge itself). Since src/main's <application> tag does not
+  declare android:networkSecurityConfig at all, this addition is purely
+  additive and needs no tools:replace.
+
+  See src/debug/res/xml/network_security_config.xml for what this enables
+  and why.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application android:networkSecurityConfig="@xml/network_security_config" />
+</manifest>

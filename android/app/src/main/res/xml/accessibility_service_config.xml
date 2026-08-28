@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Phase 8: Android Automation Foundation.
+
+  Configuration for AtlasAccessibilityService. Declared capabilities are
+  deliberately the minimum needed for the seven documented capabilities
+  (read UI hierarchy, locate controls, click, long click, scroll, type
+  text, back/home/recents/open-notifications) - no fingerprint gestures,
+  no touch exploration, no gestures beyond standard node/global actions.
+
+  settingsActivity points at MainActivity (the app's only Activity) rather
+  than a dedicated Permission Center Activity, since Permission Center is a
+  Compose screen reached via AtlasNavGraph, not a separate Activity - see
+  ui/screens/permissions/PermissionCenterScreen.kt. Tapping the gear icon
+  next to "ATLAS" in system Accessibility settings opens the app; it does
+  not yet deep-link straight to the Permission Center screen specifically -
+  see docs/Phase8_KnownLimitations.md.
+-->
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityEventTypes="typeWindowStateChanged|typeWindowContentChanged|typeViewClicked|typeViewFocused"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:accessibilityFlags="flagReportViewIds|flagRetrieveInteractiveWindows"
+    android:canPerformGestures="false"
+    android:canRequestFilterKeyEvents="false"
+    android:canRequestTouchExplorationMode="false"
+    android:canRetrieveWindowContent="true"
+    android:description="@string/accessibility_service_description"
+    android:notificationTimeout="100"
+    android:settingsActivity="com.atlas.MainActivity" />

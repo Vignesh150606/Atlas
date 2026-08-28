@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Mountain peak -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,34 L28,80 L80,80 Z" />
+    <!-- Sun -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M76,21 m-7,0 a7,7 0 1,0 14,0 a7,7 0 1,0 -14,0" />
+</vector>

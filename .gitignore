@@ -1,0 +1,36 @@
+# CLAUDE.md is persistent engineering memory for Claude sessions working on
+# this repo, not user-facing documentation - deliberately excluded from
+# version control. Every other doc under docs/ IS tracked; do not add
+# broader documentation ignores here.
+CLAUDE.md
+
+# --- Python / backend ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.env
+*.db
+*.sqlite3
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+
+# --- Android / Kotlin ---
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/*.iml
+android/.idea/
+*.apk
+*.aab
+android/captures/
+
+# --- Editors / OS ---
+.vscode/
+.DS_Store
+Thumbs.db
